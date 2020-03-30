@@ -19,57 +19,14 @@
 #define MEDIA_FACTORY_HXX
 
 #include "bspf.hxx"
-#if defined(SDL_SUPPORT)
-  #include "SDL_lib.hxx"
-#endif
-
 #include "OSystem.hxx"
 #include "Settings.hxx"
 #include "SerialPort.hxx"
-#if defined(BSPF_UNIX)
-  #include "SerialPortUNIX.hxx"
-  #if defined(RETRON77)
-    #include "SettingsR77.hxx"
-    #include "OSystemR77.hxx"
-  #else
-    #include "OSystemUNIX.hxx"
-  #endif
-#elif defined(BSPF_WINDOWS)
-  #include "SerialPortWINDOWS.hxx"
-  #include "OSystemWINDOWS.hxx"
-#elif defined(BSPF_MACOS)
-  #include "SerialPortMACOS.hxx"
-  #include "OSystemMACOS.hxx"
-  extern "C" {
-    int stellaMain(int argc, char* argv[]);
-  }
-#elif defined(__LIB_RETRO__)
-  #include "OSystemLIBRETRO.hxx"
-#else
-  #error Unsupported platform!
-#endif
+#include "SoundNull.hxx"
+#include "FrameBuffer.hxx"
+#include "Sound.hxx"
+#include "EventHandler.hxx"
 
-#if defined(__LIB_RETRO__)
-  #include "EventHandlerLIBRETRO.hxx"
-  #include "FrameBufferLIBRETRO.hxx"
-#elif defined(SDL_SUPPORT)
-  #include "EventHandlerSDL2.hxx"
-  #include "FrameBufferSDL2.hxx"
-#else
-  #error Unsupported backend!
-#endif
-
-#if defined(SOUND_SUPPORT)
-  #if defined(__LIB_RETRO__)
-    #include "SoundLIBRETRO.hxx"
-  #elif defined(SDL_SUPPORT)
-    #include "SoundSDL2.hxx"
-  #else
-    #include "SoundNull.hxx"
-  #endif
-#else
-  #include "SoundNull.hxx"
-#endif
 
 class AudioSettings;
 
@@ -86,99 +43,59 @@ class AudioSettings;
 */
 class MediaFactory
 {
+  private:
+    template<class Type, typename... Args>
+    static unique_ptr<Type> defaultHandler(Args... args) {
+      throw runtime_error("media factory: type not registered");
+    }
+
+    template<class TDerived, typename... Args>
+    static unique_ptr<TDerived> createHandler(Args... args) {
+      return make_unique<TDerived>(std::forward<Args>(args)...);
+    }
+
   public:
-    static unique_ptr<OSystem> createOSystem()
-    {
-    #if defined(BSPF_UNIX)
-      #if defined(RETRON77)
-        return make_unique<OSystemR77>();
-      #else
-        return make_unique<OSystemUNIX>();
-      #endif
-    #elif defined(BSPF_WINDOWS)
-      return make_unique<OSystemWINDOWS>();
-    #elif defined(BSPF_MACOS)
-      return make_unique<OSystemMACOS>();
-    #elif defined(__LIB_RETRO__)
-      return make_unique<OSystemLIBRETRO>();
-    #else
-      #error Unsupported platform for OSystem!
-    #endif
+    using OSystemCreator = std::function<unique_ptr<OSystem>()>;
+    using SettingsCreator = std::function<unique_ptr<Settings>()>;
+    using SerialPortCreator = std::function<unique_ptr<SerialPort>()>;
+    using FrameBufferCreator = std::function<unique_ptr<FrameBuffer>(OSystem&)>;
+    using SoundCreator = std::function<unique_ptr<Sound>(OSystem&, AudioSettings&)>;
+    using EventHandlerCreator = std::function<unique_ptr<EventHandler>(OSystem&)>;
+
+    static OSystemCreator createOSystem;
+    static SettingsCreator createSettings;
+    static SerialPortCreator createSerialPort;
+    static FrameBufferCreator createVideo;
+    static SoundCreator createAudio;
+    static EventHandlerCreator createEventHandler;
+
+    static string backendName() {
+      return "";
     }
 
-    static unique_ptr<Settings> createSettings()
-    {
-    #ifdef RETRON77
-      return make_unique<SettingsR77>();
-    #else
-      return make_unique<Settings>();
-    #endif
+    template<class T>
+    static typename std::enable_if<std::is_base_of<OSystem, T>::value>::type Register() {
+      MediaFactory::createOSystem = std::move(MediaFactory::createHandler<T>);
     }
-
-    static unique_ptr<SerialPort> createSerialPort()
-    {
-    #if defined(BSPF_UNIX)
-      return make_unique<SerialPortUNIX>();
-    #elif defined(BSPF_WINDOWS)
-      return make_unique<SerialPortWINDOWS>();
-    #elif defined(BSPF_MACOS)
-      return make_unique<SerialPortMACOS>();
-    #else
-      return make_unique<SerialPort>();
-    #endif
+    template<class T>
+    static typename std::enable_if<std::is_base_of<Settings, T>::value>::type Register() {
+      MediaFactory::createSettings = std::move(MediaFactory::createHandler<T>);
     }
-
-    static unique_ptr<FrameBuffer> createVideo(OSystem& osystem)
-    {
-    #if defined(__LIB_RETRO__)
-      return make_unique<FrameBufferLIBRETRO>(osystem);
-    #elif defined(SDL_SUPPORT)
-      return make_unique<FrameBufferSDL2>(osystem);
-    #else
-      #error Unsupported platform for FrameBuffer!
-    #endif
+    template<class T>
+    static typename std::enable_if<std::is_base_of<SerialPort, T>::value>::type Register() {
+      MediaFactory::createSerialPort = std::move(MediaFactory::createHandler<T>);
     }
-
-    static unique_ptr<Sound> createAudio(OSystem& osystem, AudioSettings& audioSettings)
-    {
-    #if defined(SOUND_SUPPORT)
-      #if defined(__LIB_RETRO__)
-        return make_unique<SoundLIBRETRO>(osystem, audioSettings);
-      #elif defined(SOUND_SUPPORT) && defined(SDL_SUPPORT)
-        return make_unique<SoundSDL2>(osystem, audioSettings);
-      #else
-        return make_unique<SoundNull>(osystem);
-      #endif
-    #else
-      return make_unique<SoundNull>(osystem);
-    #endif
+    template<class T>
+    static typename std::enable_if<std::is_base_of<FrameBuffer, T>::value>::type Register() {
+      MediaFactory::createVideo = std::move(MediaFactory::createHandler<T, OSystem&>);
     }
-
-    static unique_ptr<EventHandler> createEventHandler(OSystem& osystem)
-    {
-    #if defined(__LIB_RETRO__)
-      return make_unique<EventHandlerLIBRETRO>(osystem);
-    #elif defined(SDL_SUPPORT)
-      return make_unique<EventHandlerSDL2>(osystem);
-    #else
-      #error Unsupported platform for EventHandler!
-    #endif
+    template<class T>
+    static typename std::enable_if<std::is_base_of<Sound, T>::value>::type Register() {
+      MediaFactory::createAudio = std::move(MediaFactory::createHandler<T, OSystem&, AudioSettings&>);
     }
-
-    static void cleanUp()
-    {
-    #if defined(SDL_SUPPORT)
-      SDL_Quit();
-    #endif
-    }
-
-    static string backendName()
-    {
-    #if defined(SDL_SUPPORT)
-      return SDLVersion();
-    #else
-      return "Custom backend";
-    #endif
+    template<class T>
+    static typename std::enable_if<std::is_base_of<EventHandler, T>::value>::type Register() {
+      MediaFactory::createEventHandler = std::move(MediaFactory::createHandler<T, OSystem&>);
     }
 
   private:

@@ -44,6 +44,44 @@
   #include "CheatManager.hxx"
 #endif
 
+// Backend support
+#if defined(__LIB_RETRO__)
+  #include "EventHandlerLIBRETRO.hxx"
+  #include "FrameBufferLIBRETRO.hxx"
+  #if defined(SOUND_SUPPORT)
+    #include "SoundLIBRETRO.hxx"
+  #endif
+#elif defined(SDL_SUPPORT)
+  #include "EventHandlerSDL2.hxx"
+  #include "FrameBufferSDL2.hxx"
+  #if defined(SOUND_SUPPORT)
+    #include "SoundSDL2.hxx"
+  #endif
+#else
+  #error Unsupported backend!
+#endif
+
+// Platform support
+#if defined(BSPF_UNIX)
+  #include "SerialPortUNIX.hxx"
+  #if defined(RETRON77)
+    #include "SettingsR77.hxx"
+    #include "OSystemR77.hxx"
+  #else
+    #include "OSystemUNIX.hxx"
+  #endif
+#elif defined(BSPF_WINDOWS)
+  #include "SerialPortWINDOWS.hxx"
+  #include "OSystemWINDOWS.hxx"
+#elif defined(BSPF_MACOS)
+  #include "SerialPortMACOS.hxx"
+  #include "OSystemMACOS.hxx"
+#elif defined(__LIB_RETRO__)
+  #include "OSystemLIBRETRO.hxx"
+#else
+  #error Unsupported platform!
+#endif
+
 /**
   Parse the commandline arguments and store into the appropriate hashmap.
 
@@ -73,6 +111,9 @@ void checkForCustomBaseDir(Settings::Options& options);
   starting a profile session.
 */
 bool isProfilingRun(int ac, char* av[]);
+
+void registerPlatform();
+void registerBackend();
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 void parseCommandLine(int ac, char* av[],
@@ -154,6 +195,66 @@ bool isProfilingRun(int ac, char* av[]) {
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+void registerPlatform() {
+  // OSystem
+#if defined(BSPF_UNIX)
+  #if defined(RETRON77)
+    MediaFactory::Register<OSystemR77>();
+  #else
+    MediaFactory::Register<OSystemUNIX>();
+  #endif
+#elif defined(BSPF_WINDOWS)
+  MediaFactory::Register<OSystemWINDOWS>();
+#elif defined(BSPF_MACOS)
+  MediaFactory::Register<OSystemMACOS>();
+#elif defined(__LIB_RETRO__)
+  MediaFactory::Register<OSystemLIBRETRO>();
+#endif
+
+  // Settings
+#ifdef RETRON77
+  MediaFactory::Register<SettingsR77>();
+#else
+  MediaFactory::Register<Settings>();
+#endif
+
+  // Serial Port
+#if defined(BSPF_UNIX)
+  MediaFactory::Register<SerialPortUNIX>();
+#elif defined(BSPF_WINDOWS)
+  MediaFactory::Register<SerialPortWINDOWS>();
+#elif defined(BSPF_MACOS)
+  MediaFactory::Register<SerialPortMACOS>();
+#else
+  MediaFactory::Register<SerialPort>();
+#endif
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+void registerBackend() {
+  // Sound support
+#if defined(SOUND_SUPPORT)
+  #if defined(__LIB_RETRO__)
+    MediaFactory::Register<SoundLIBRETRO>();
+  #elif defined(SDL_SUPPORT)
+    MediaFactory::Register<SoundSDL2>();
+  #endif
+#else
+  MediaFactory::Register<SoundNull>();
+#endif
+
+  // Event Handler
+#if defined(__LIB_RETRO__)
+  MediaFactory::Register<FrameBufferLIBRETRO>();
+  MediaFactory::Register<EventHandlerLIBRETRO>();
+#elif defined(SDL_SUPPORT)
+  MediaFactory::Register<FrameBufferSDL2>();
+  MediaFactory::Register<EventHandlerSDL2>();
+#endif
+
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #if defined(BSPF_MACOS)
 int stellaMain(int ac, char* av[])
 #else
@@ -161,6 +262,9 @@ int main(int ac, char* av[])
 #endif
 {
   SET_MAIN_THREAD;
+
+  registerPlatform();
+  registerBackend();
 
   std::ios_base::sync_with_stdio(false);
 
@@ -187,7 +291,7 @@ int main(int ac, char* av[])
       theOSystem->saveConfig();
       theOSystem.reset();     // Force delete of object
     }
-    MediaFactory::cleanUp();  // Finish any remaining cleanup
+    //MediaFactory::cleanUp();  // Finish any remaining cleanup
 
     return 0;
   };

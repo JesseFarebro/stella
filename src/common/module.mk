@@ -10,6 +10,7 @@ MODULE_OBJS := \
 	src/common/KeyMap.o \
 	src/common/Logger.o \
 	src/common/main.o \
+	src/common/MediaFactory.o \
 	src/common/MouseControl.o \
 	src/common/PhosphorHandler.o \
 	src/common/PhysicalJoystick.o \
