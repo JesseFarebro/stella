@@ -82,6 +82,20 @@
   #error Unsupported platform!
 #endif
 
+#include "FSNodeFactory.hxx"
+#if defined(ZIP_SUPPORT)
+  #include "FSNodeZIP.hxx"
+#endif
+#if defined(BSPF_UNIX) || defined(BSPF_MACOS)
+  #include "FSNodePOSIX.hxx"
+#elif defined(BSPF_WINDOWS)
+  #include "FSNodeWINDOWS.hxx"
+#elif defined(__LIB_RETRO__)
+  #include "FSNodeLIBRETRO.hxx"
+#else
+  #error Unsupported platform in FSNodeFactory!
+#endif
+
 /**
   Parse the commandline arguments and store into the appropriate hashmap.
 
@@ -114,6 +128,7 @@ bool isProfilingRun(int ac, char* av[]);
 
 void registerPlatform();
 void registerBackend();
+void registerFilesystem();
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 void parseCommandLine(int ac, char* av[],
@@ -255,6 +270,21 @@ void registerBackend() {
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+void registerFilesystem() {
+#if defined(BSPF_UNIX) || defined(BSPF_MACOS)
+  FilesystemNodeFactory::Register<FilesystemNodePOSIX>(FilesystemNodeFactory::Type::SYSTEM);
+#elif defined(BSPF_WINDOWS)
+  FilesystemNodeFactory::Register<FilesystemNodeWINDOWS>(FilesystemNodeFactory::Type::SYSTEM);
+#elif defined(__LIB_RETRO__)
+  FilesystemNodeFactory::Register<FilesystemNodeLIBRETRO>(FilesystemNodeFactory::Type::SYSTEM);
+#endif
+
+#if defined(ZIP_SUPPORT)
+  FilesystemNodeFactory::Register<FilesystemNodeZIP>(FilesystemNodeFactory::Type::ZIP);
+#endif
+}
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 #if defined(BSPF_MACOS)
 int stellaMain(int ac, char* av[])
 #else
@@ -265,6 +295,7 @@ int main(int ac, char* av[])
 
   registerPlatform();
   registerBackend();
+  registerFilesystem();
 
   std::ios_base::sync_with_stdio(false);
 

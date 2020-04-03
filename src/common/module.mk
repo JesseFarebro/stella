@@ -12,6 +12,7 @@ MODULE_OBJS := \
 	src/common/main.o \
 	src/common/MediaFactory.o \
 	src/common/MouseControl.o \
+	src/common/FSNodeFactory.o \
 	src/common/PhosphorHandler.o \
 	src/common/PhysicalJoystick.o \
 	src/common/PJoystickHandler.o \

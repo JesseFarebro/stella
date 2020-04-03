@@ -18,20 +18,10 @@
 #ifndef FSNODE_FACTORY_HXX
 #define FSNODE_FACTORY_HXX
 
-class AbstractFSNode;
+#include <iostream>
+#include <unordered_map>
 
-#if defined(ZIP_SUPPORT)
-  #include "FSNodeZIP.hxx"
-#endif
-#if defined(BSPF_UNIX) || defined(BSPF_MACOS)
-  #include "FSNodePOSIX.hxx"
-#elif defined(BSPF_WINDOWS)
-  #include "FSNodeWINDOWS.hxx"
-#elif defined(__LIB_RETRO__)
-  #include "FSNodeLIBRETRO.hxx"
-#else
-  #error Unsupported platform in FSNodeFactory!
-#endif
+class AbstractFSNode;
 
 /**
   This class deals with creating the different FSNode implementations.
@@ -44,29 +34,30 @@ class FilesystemNodeFactory
     enum class Type { SYSTEM, ZIP };
 
   public:
-    static unique_ptr<AbstractFSNode> create(const string& path, Type type)
+    static std::unique_ptr<AbstractFSNode> create(const std::string& path, Type type)
     {
-      switch(type)
-      {
-        case Type::SYSTEM:
-        #if defined(BSPF_UNIX) || defined(BSPF_MACOS)
-          return make_unique<FilesystemNodePOSIX>(path);
-        #elif defined(BSPF_WINDOWS)
-          return make_unique<FilesystemNodeWINDOWS>(path);
-        #elif defined(__LIB_RETRO__)
-          return make_unique<FilesystemNodeLIBRETRO>(path);
-        #endif
-          break;
-        case Type::ZIP:
-        #if defined(ZIP_SUPPORT)
-          return make_unique<FilesystemNodeZIP>(path);
-        #endif
-          break;
+      auto it = registry.find(type);
+
+      if (it == registry.end()) {
+        std::cerr << "Could not find FSNode type " << (int)type << std::endl;
+        return nullptr;
       }
-      return nullptr;
+      return it->second(path);
+    }
+
+    template<class T>
+    static typename std::enable_if<std::is_base_of<AbstractFSNode, T>::value>::type Register(Type type) {
+      registry[type] = std::move(FilesystemNodeFactory::createHandler<T, const std::string&>);
     }
 
   private:
+    static std::unordered_map<Type, std::function<std::unique_ptr<AbstractFSNode>(const std::string&)>> registry;
+
+    template<class TDerived, typename... Args>
+    static std::unique_ptr<TDerived> createHandler(Args... args) {
+      return make_unique<TDerived>(std::forward<Args>(args)...);
+    }
+
     // Following constructors and assignment operators not supported
     FilesystemNodeFactory() = delete;
     FilesystemNodeFactory(const FilesystemNodeFactory&) = delete;
